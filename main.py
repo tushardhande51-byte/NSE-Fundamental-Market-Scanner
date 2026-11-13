@@ -306,7 +306,7 @@ def main():
         "Review latest filings, valuation and liquidity before investing.",
         "CSV: final_scanner_results.csv",
     ])
-    report = "\\n".join(lines)
+    report = "\n".join(lines)
     print(report)
 
     # Telegram is optional; this scanner still works if these secrets are not configured.
@@ -315,15 +315,15 @@ def main():
     if token and chat_id:
         chunks, current = [], []
         for line in lines:
-            candidate = "\\n".join(current + [line])
+            candidate = "\n".join(current + [line])
             if len(candidate) > 3500 and current:
-                chunks.append("\\n".join(current))
+                chunks.append("\n".join(current))
                 current = []
             current.append(line)
         if current:
-            chunks.append("\\n".join(current))
+            chunks.append("\n".join(current))
         for part, chunk in enumerate(chunks, 1):
-            text_to_send = f"[Part {part}/{len(chunks)}]\\n{chunk}" if len(chunks) > 1 else chunk
+            text_to_send = f"[Part {part}/{len(chunks)}]\n{chunk}" if len(chunks) > 1 else chunk
             try:
                 import requests
                 response = requests.post(
