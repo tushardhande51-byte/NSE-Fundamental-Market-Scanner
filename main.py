@@ -211,14 +211,138 @@ def main():
     qualified = df[df.get("Qualified", pd.Series(False, index=df.index)) == True]
     watchlist = df[df.get("Status", pd.Series("", index=df.index)) == "WATCHLIST"]
 
-    print("\n" + "=" * 78)
-    print(f"Stocks processed: {len(df)}")
-    print(f"Qualified stocks: {len(qualified)}")
-    print(f"Watchlist stocks: {len(watchlist)}")
-    print(f"Rows with incomplete/missing data: {int((df.get('Status', pd.Series(dtype=str)) == 'INCOMPLETE_DATA').sum())}")
-    print("Saved: final_scanner_results.csv")
-    print("NOTE: Current free source does not supply all promoter metrics or historical P/E.")
-    print("A stock cannot qualify until required fields and P/E re-rating data are verified.")
+    incomplete_count = int((df.get("Status", pd.Series(dtype=str)) == "INCOMPLETE_DATA").sum())
+    exceptional = df[df.get("Status", pd.Series("", index=df.index)) == "EXCEPTIONAL"]
+    strong = df[df.get("Status", pd.Series("", index=df.index)) == "STRONG"]
+    red = df[df.get("Status", pd.Series("", index=df.index)) == "REJECT"]
+    ranked = df.sort_values("Final Score /100", ascending=False, na_position="last")
+    top3 = ranked.head(3)
+
+    lines = [
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "📊 NSE FUNDAMENTAL SCANNER | EOD REPORT",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"📅 Date: {pd.Timestamp.now(tz='Asia/Kolkata'):%d-%m-%Y}",
+        f"📊 Stocks scanned: {len(df)} | Errors: {int((df.get('Status', pd.Series('', index=df.index)) == 'DATA_ERROR').sum())}",
+        f"🏆 Qualified: {len(qualified)} | Watchlist: {len(watchlist)}",
+        f"⚠️ Incomplete data: {incomplete_count}",
+        "",
+        "📌 SCANNER RULES",
+        "• Fundamental score: 60 | Market validation: 40 | Final: 100.",
+        "• 11 fundamental parameters are checked.",
+        "• Missing data is NOT counted as PASS.",
+        "• Qualified status requires all configured score and data checks.",
+        "• This is a screening report, not a buy/sell signal.",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "🏆 TOP 3 STOCKS SUMMARY",
+        "",
+    ]
+    if top3.empty:
+        lines.append("No stock data available for ranking.")
+    else:
+        for rank, (_, row) in enumerate(top3.iterrows(), 1):
+            lines.extend([
+                f"{rank}. {row.get('Symbol', 'N/A')}",
+                f"   Status: {row.get('Status', 'N/A')} | Final: {row.get('Final Score /100', 'N/A')}/100",
+                f"   Fundamental: {row.get('Fundamental Score /60', 'N/A')}/60 | Market: {row.get('Market Score /40', 'N/A')}/40",
+                f"   Data: {row.get('Data Fields Available /11', 'N/A')}/11 fields",
+                "",
+            ])
+
+    lines.extend(["📋 QUALIFIED STOCKS", ""])
+    if qualified.empty:
+        lines.append("No stock currently meets all qualification rules.")
+    else:
+        for rank, (_, row) in enumerate(qualified.sort_values("Final Score /100", ascending=False).iterrows(), 1):
+            lines.append(f"{rank}. {row.get('Symbol')} | Score {row.get('Final Score /100')}/100 | {row.get('Status')}")
+
+    lines.extend(["", "📌 DETAILED TOP STOCKS (UP TO 20)", ""])
+    fundamental_fields = [
+        ("Revenue Growth", "Revenue Growth %", "%"),
+        ("EPS Growth", "EPS Growth %", "%"),
+        ("PAT Growth", "PAT Growth %", "%"),
+        ("ROCE", "ROCE %", "%"),
+        ("ROE", "ROE %", "%"),
+        ("Debt/Equity", "Debt/Equity", ""),
+        ("P/E", "P/E", ""),
+        ("Operating Margin", "Operating Margin %", "%"),
+        ("Promoter Holding", "Promoter Holding %", "%"),
+        ("Promoter Pledge", "Promoter Pledge %", "%"),
+        ("Interest Coverage", "Interest Coverage", "x"),
+    ]
+    for rank, (_, row) in enumerate(ranked.head(20).iterrows(), 1):
+        lines.extend([
+            f"🔹 STOCK {rank}: {row.get('Symbol', 'N/A')}",
+            f"Status: {row.get('Status', 'N/A')} | Final Score: {row.get('Final Score /100', 'N/A')}/100",
+            f"Fundamental: {row.get('Fundamental Score /60', 'N/A')}/60 | Market: {row.get('Market Score /40', 'N/A')}/40",
+            f"Price: ₹{row.get('Price'):.2f}" if pd.notna(row.get("Price")) else "Price: N/A",
+            f"Data coverage: {row.get('Data Fields Available /11', 'N/A')}/11",
+            f"Missing: {row.get('Missing Fields') or 'None'}",
+            "📊 FUNDAMENTAL PARAMETERS",
+        ])
+        for label, column, suffix in fundamental_fields:
+            value = row.get(column)
+            shown = f"{value:.2f}{suffix}" if pd.notna(value) else "N/A"
+            lines.append(f"• {label}: {shown}")
+        lines.extend([
+            "📈 MARKET VALIDATION",
+            f"Price trend score: {row.get('Price Trend /20', 'N/A')}/20",
+            f"P/E re-rating score: {row.get('P/E Re-rating /20', 'N/A')}/20",
+            f"3M return: {row.get('3M Return %'):.2f}%" if pd.notna(row.get("3M Return %")) else "3M return: N/A",
+            f"6M return: {row.get('6M Return %'):.2f}%" if pd.notna(row.get("6M Return %")) else "6M return: N/A",
+            f"P/E re-rating verified: {row.get('Market Re-rating Verified', 'N/A')}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ])
+
+    lines.extend([
+        "🛡️ FINAL SUMMARY",
+        f"🟢 Exceptional: {len(exceptional)} | 🟡 Strong: {len(strong)} | 🔴 Reject: {len(red)}",
+        f"⚠️ Incomplete data: {incomplete_count}",
+        "",
+        "DATA NOTE: Free Yahoo Finance source may not provide ROCE, promoter holding, promoter pledge or historical P/E.",
+        "Missing fields remain N/A and are never treated as verified PASS.",
+        "Review latest filings, valuation and liquidity before investing.",
+        "CSV: final_scanner_results.csv",
+    ])
+    report = "\\n".join(lines)
+    print(report)
+
+    # Telegram is optional; this scanner still works if these secrets are not configured.
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if token and chat_id:
+        chunks, current = [], []
+        for line in lines:
+            candidate = "\\n".join(current + [line])
+            if len(candidate) > 3500 and current:
+                chunks.append("\\n".join(current))
+                current = []
+            current.append(line)
+        if current:
+            chunks.append("\\n".join(current))
+        for part, chunk in enumerate(chunks, 1):
+            text_to_send = f"[Part {part}/{len(chunks)}]\\n{chunk}" if len(chunks) > 1 else chunk
+            try:
+                import requests
+                response = requests.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={"chat_id": chat_id, "text": text_to_send, "disable_web_page_preview": True},
+                    timeout=25,
+                )
+                response.raise_for_status()
+                if not response.json().get("ok"):
+                    print(f"Telegram delivery failed on part {part}/{len(chunks)}: {response.text[:300]}")
+                    break
+                print(f"Telegram part delivered: {part}/{len(chunks)}")
+                if part < len(chunks):
+                    time.sleep(1)
+            except Exception as exc:
+                print(f"Telegram delivery failed: {exc}")
+                break
+    else:
+        print("Telegram skipped: TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID secrets are not configured.")
 
 
 if __name__ == "__main__":
