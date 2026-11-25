@@ -121,6 +121,7 @@ def get_stock_data(symbol):
             return {"Symbol": symbol, "Status": "DATA_ERROR", "Error": "No price history"}
 
         income = ticker.financials
+        quarterly_income = ticker.quarterly_financials
         balance = ticker.balance_sheet
 
         # Do not duplicate EPS growth as PAT growth. Use reported annual net income.
@@ -155,6 +156,10 @@ def get_stock_data(symbol):
             "promoter_holding": None,
             "promoter_pledge": None,
             "interest_coverage": interest_coverage,
+            "ebitda_margin": ebitda_margin_raw * 100 if ebitda_margin_raw is not None else None,
+            "quarterly_revenue_trend": quarterly_trend(quarterly_income, ["Total Revenue", "Operating Revenue"]),
+            "quarterly_ebitda_trend": quarterly_trend(quarterly_income, ["EBITDA", "Normalized EBITDA"]),
+            "quarterly_pat_trend": quarterly_trend(quarterly_income, ["Net Income", "Net Income Common Stockholders"]),
         }
 
         fund_score, fund_results = fundamental_score(data)\n        category, category_reason = classify_growth_category(data)
