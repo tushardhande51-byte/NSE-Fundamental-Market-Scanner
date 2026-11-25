@@ -133,7 +133,8 @@ def get_stock_data(symbol):
         eps_growth_raw = safe_float(info.get("earningsGrowth"))
         roe_raw = safe_float(info.get("returnOnEquity"))
         debt_equity_raw = safe_float(info.get("debtToEquity"))
-        margin_raw = safe_float(info.get("operatingMargins"))\n        ebitda_margin_raw = safe_float(info.get("ebitdaMargins"))
+        margin_raw = safe_float(info.get("operatingMargins"))
+        ebitda_margin_raw = safe_float(info.get("ebitdaMargins"))
 
         ebit = statement_value(income, ["EBIT", "Operating Income"], 0)
         interest_expense = statement_value(income, ["Interest Expense", "Interest Expense Non Operating"], 0)
