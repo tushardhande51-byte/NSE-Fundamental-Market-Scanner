@@ -1,27 +1,29 @@
 # NSE Fundamental + Market Validation Scanner
 
-This repository runs the **fundamental scanner**. The GitHub Actions workflow is scheduled for weekdays after the Indian cash market closes and can also be started manually.
+This repository scans the NSE equity universe and reports three business-development categories alongside the existing 11-parameter fundamental score and 40-point market validation score.
 
-## What it checks
+## Three business categories
+- **A_COMPOUNDER:** established profitability and return ratios. Requires observed revenue growth, positive PAT growth, ROCE >= 15%, ROE >= 15%, debt/equity <= 0.5 and operating margin >= 10%.
+- **B_EMERGING_GROWTH:** revenue growth >= 15% plus positive EBITDA margin or improving quarterly EBITDA; positive PAT and a usable P/E are not mandatory. Debt/equity above 1.0 blocks this classification when known.
+- **C_TURNAROUND:** latest three reported quarters show sequentially improving revenue and either EBITDA or PAT. This is an evidence-based early recovery flag, not a buy signal.
+- **UNCLASSIFIED:** evidence is insufficient. Missing data is never assumed to pass.
 
-- Fundamental score out of 60 across 11 criteria.
-- Price trend score out of 20 using price/EMA20, EMA20/EMA50, EMA50/EMA200, 3-month return, and 6-month return.
-- P/E re-rating score out of 20 when historical P/E observations are available.
-- Data availability is reported separately. Missing fields are not silently treated as verified passes.
-- Output: `final_scanner_results.csv`, attached to each workflow run as an artifact.
+## Existing scoring retained
+- Fundamental score: 60 points across 11 criteria.
+- Price trend score: 20 points (price/EMA20, EMA20/EMA50, EMA50/EMA200, 3-month return, 6-month return).
+- P/E re-rating score: 20 points when historical observations exist.
+- Final score: 100 points. Category classification is separate from the score and does not bypass data-quality checks.
 
-## Important data limitations in this free-data version
+## Data limitations
+Yahoo Finance may not reliably expose ROCE, promoter holding, promoter pledge, quarterly EBITDA, or historical P/E for every NSE company. Missing fields remain N/A / DATA_UNAVAILABLE. Category B can be assigned without positive PAT only when the available revenue and EBITDA evidence meets the stated rules. Category C requires sequential quarterly statement evidence. No missing field is imputed.
 
-Yahoo Finance does not reliably provide every NSE fundamental field. In particular, this version does **not yet** source ROCE, promoter holding, promoter pledge, or historical P/E consistently. Those fields are shown as missing, and a stock cannot be labelled as fully qualified until the required data is verified. This is intentional: an incomplete row is not a buy recommendation.
+The free-data version calculates PAT growth from reported annual net income where available. It does not fabricate ROCE from ROE or treat unavailable promoter data as zero.
 
-PAT growth is calculated from the latest two annual net-income figures when available; it is not copied from EPS growth. Interest coverage is calculated from available income-statement figures when possible.
-
-## Run modes
-
-- Scheduled run: weekdays at 17:00 IST.
-- Manual run: GitHub → Actions → Daily Fundamental Stock Scanner → Run workflow.
-- Optional test run: set the workflow environment variable `SCAN_LIMIT` to a small number (for example, `25`) while checking data-source reliability. `0` means use the downloaded NSE equity universe.
+## Output and run modes
+- CSV artifact: `final_scanner_results.csv`
+- Scheduled/manual GitHub Actions behavior is unchanged.
+- `SCAN_LIMIT=25` runs a small diagnostic sample; `0` scans the downloaded NSE equity universe.
+- Telegram delivery remains optional and uses the existing repository secrets.
 
 ## Interpretation
-
-A high score is only a screening result, not a guarantee or a buy/sell instruction. Review latest company filings, valuation, liquidity, corporate actions, and risk before investing. Free public data may be delayed, incomplete, blocked, or inconsistent.
+Categories are screening labels, not buy/sell recommendations. A high score or category label does not establish fair value, future profitability, or safety. Review company filings, cash flow, debt, dilution, valuation, liquidity and execution risks before investing.
