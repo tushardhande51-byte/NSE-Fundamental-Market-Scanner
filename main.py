@@ -53,6 +53,64 @@ def growth_pct(latest, previous):
     return (latest / previous - 1.0) * 100.0
 
 
+
+def classify_growth_category(data):
+    """Classify businesses without forcing loss-making growth firms through P/E/ROE gates."""
+    revenue = safe_float(data.get("revenue_growth"))
+    ebitda_margin = safe_float(data.get("ebitda_margin"))
+    pat_growth = safe_float(data.get("pat_growth"))
+    eps_growth = safe_float(data.get("eps_growth"))
+    roce = safe_float(data.get("roce"))
+    roe = safe_float(data.get("roe"))
+    debt = safe_float(data.get("debt_equity"))
+    opm = safe_float(data.get("operating_margin"))
+    q_revenue_trend = data.get("quarterly_revenue_trend")
+    q_ebitda_trend = data.get("quarterly_ebitda_trend")
+    q_pat_trend = data.get("quarterly_pat_trend")
+
+    # Category A: established, profitable quality. Missing values do not pass.
+    if (revenue is not None and revenue >= 10 and pat_growth is not None and pat_growth > 0
+        and roce is not None and roce >= 15 and roe is not None and roe >= 15
+        and debt is not None and debt <= 0.5 and opm is not None and opm >= 10):
+        return "A_COMPOUNDER", "Established profitability and return ratios"
+
+    # Category B: emerging growth; P/E and positive PAT are deliberately not mandatory.
+    # Require strong sales growth plus positive EBITDA margin or documented improvement.
+    ebitda_improving = q_ebitda_trend == "IMPROVING"
+    if (revenue is not None and revenue >= 15
+        and ((ebitda_margin is not None and ebitda_margin > 0) or ebitda_improving)
+        and (debt is None or debt <= 1.0)):
+        return "B_EMERGING_GROWTH", "Revenue growth with positive/improving EBITDA; valuation and cash burn need review"
+
+    # Category C: turnaround requires observable sequential improvement, not a low share price.
+    if q_revenue_trend == "IMPROVING" and (q_ebitda_trend == "IMPROVING" or q_pat_trend == "IMPROVING"):
+        return "C_TURNAROUND", "Quarterly operating improvement; confirm it persists"
+
+    return "UNCLASSIFIED", "Insufficient evidence for A/B/C; missing data is not a pass"
+
+
+def quarterly_trend(statement, row_names):
+    """Compare the latest three reported quarters, newest first."""
+    if statement is None or statement.empty or len(statement.columns) < 3:
+        return "DATA_UNAVAILABLE"
+    value = None
+    for name in row_names:
+        if name in statement.index:
+            value = statement.loc[name]
+            break
+    if value is None:
+        return "DATA_UNAVAILABLE"
+    vals = [safe_float(value.iloc[i]) for i in range(3)]
+    if any(v is None for v in vals):
+        return "DATA_UNAVAILABLE"
+    latest, previous, oldest = vals
+    if latest > previous > oldest:
+        return "IMPROVING"
+    if latest < previous < oldest:
+        return "DETERIORATING"
+    return "MIXED"
+
+
 def get_stock_data(symbol):
     print(f"Analyzing {symbol}...", flush=True)
     try:
@@ -74,7 +132,7 @@ def get_stock_data(symbol):
         eps_growth_raw = safe_float(info.get("earningsGrowth"))
         roe_raw = safe_float(info.get("returnOnEquity"))
         debt_equity_raw = safe_float(info.get("debtToEquity"))
-        margin_raw = safe_float(info.get("operatingMargins"))
+        margin_raw = safe_float(info.get("operatingMargins"))\n        ebitda_margin_raw = safe_float(info.get("ebitdaMargins"))
 
         ebit = statement_value(income, ["EBIT", "Operating Income"], 0)
         interest_expense = statement_value(income, ["Interest Expense", "Interest Expense Non Operating"], 0)
@@ -99,7 +157,7 @@ def get_stock_data(symbol):
             "interest_coverage": interest_coverage,
         }
 
-        fund_score, fund_results = fundamental_score(data)
+        fund_score, fund_results = fundamental_score(data)\n        category, category_reason = classify_growth_category(data)
         known_fields = sum(data.get(field) is not None for field in REQUIRED_FIELDS)
         missing_fields = [field for field in REQUIRED_FIELDS if data.get(field) is None]
 
@@ -216,7 +274,7 @@ def main():
     strong = df[df.get("Status", pd.Series("", index=df.index)) == "STRONG"]
     red = df[df.get("Status", pd.Series("", index=df.index)) == "REJECT"]
     ranked = df.sort_values("Final Score /100", ascending=False, na_position="last")
-    top3 = ranked.head(3)
+    top3 = ranked.head(3)\n    category_counts = df.get("Growth Category", pd.Series(dtype=str)).value_counts().to_dict()
 
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -225,7 +283,7 @@ def main():
         f"📅 Date: {pd.Timestamp.now(tz='Asia/Kolkata'):%d-%m-%Y}",
         f"📊 Stocks scanned: {len(df)} | Errors: {int((df.get('Status', pd.Series('', index=df.index)) == 'DATA_ERROR').sum())}",
         f"🏆 Qualified: {len(qualified)} | Watchlist: {len(watchlist)}",
-        f"⚠️ Incomplete data: {incomplete_count}",
+        f"⚠️ Incomplete data: {incomplete_count}",\n        f"🧱 Category A Compounders: {category_counts.get('A_COMPOUNDER', 0)}",\n        f"🚀 Category B Emerging Growth: {category_counts.get('B_EMERGING_GROWTH', 0)}",\n        f"🔄 Category C Turnaround: {category_counts.get('C_TURNAROUND', 0)}",\n        f"❔ Unclassified: {category_counts.get('UNCLASSIFIED', 0)}",
         "",
         "📌 SCANNER RULES",
         "• Fundamental score: 60 | Market validation: 40 | Final: 100.",
@@ -246,7 +304,7 @@ def main():
                 f"{rank}. {row.get('Symbol', 'N/A')}",
                 f"   Status: {row.get('Status', 'N/A')} | Final: {row.get('Final Score /100', 'N/A')}/100",
                 f"   Fundamental: {row.get('Fundamental Score /60', 'N/A')}/60 | Market: {row.get('Market Score /40', 'N/A')}/40",
-                f"   Data: {row.get('Data Fields Available /11', 'N/A')}/11 fields",
+                f"   Category: {row.get('Growth Category', 'UNCLASSIFIED')}",\n                f"   Data: {row.get('Data Fields Available /11', 'N/A')}/11 fields",
                 "",
             ])
 
@@ -274,7 +332,7 @@ def main():
     for rank, (_, row) in enumerate(ranked.head(20).iterrows(), 1):
         lines.extend([
             f"🔹 STOCK {rank}: {row.get('Symbol', 'N/A')}",
-            f"Status: {row.get('Status', 'N/A')} | Final Score: {row.get('Final Score /100', 'N/A')}/100",
+            f"Status: {row.get('Status', 'N/A')} | Category: {row.get('Growth Category', 'UNCLASSIFIED')} | Final Score: {row.get('Final Score /100', 'N/A')}/100",\n            f"Category reason: {row.get('Category Reason', 'N/A')}",\n            f"EBITDA Margin: {row.get('EBITDA Margin %'):.2f}%" if pd.notna(row.get("EBITDA Margin %")) else "EBITDA Margin: N/A",\n            f"Quarterly trend — Revenue: {row.get('Quarterly Revenue Trend', 'N/A')} | EBITDA: {row.get('Quarterly EBITDA Trend', 'N/A')} | PAT: {row.get('Quarterly PAT Trend', 'N/A')}",
             f"Fundamental: {row.get('Fundamental Score /60', 'N/A')}/60 | Market: {row.get('Market Score /40', 'N/A')}/40",
             f"Price: ₹{row.get('Price'):.2f}" if pd.notna(row.get("Price")) else "Price: N/A",
             f"Data coverage: {row.get('Data Fields Available /11', 'N/A')}/11",
